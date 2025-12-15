@@ -32,7 +32,7 @@ export function ChatInput({
   };
 
   return (
-    <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-md px-4 pb-2 bg-white z-10">
+    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md px-4 pb-4 pt-2 bg-white z-10 border-t border-zinc-200">
       <div className="flex items-center gap-2">
         {/* Microphone button */}
         <button
