@@ -4,110 +4,196 @@ import { MobileContainer } from "@/components/mobile-container";
 import { Sidebar } from "@/components/sidebar";
 import { ChatInput } from "@/components/chat-input";
 import { Timeline } from "@/components/timeline";
-import { Menu } from "lucide-react";
-import { useState } from "react";
-import type { ChatMessageData } from "@/components/chat-message";
+import { Header } from "@/components/shared/header";
+import { useState, useCallback } from "react";
+import { analyzeInput } from "@/app/actions";
+import type { TimelineItem } from "@/lib/types";
+import { useData } from "@/contexts/data-context";
+import { generateTimelineId } from "@/lib/utils/ids";
+import { MIN_VIEWPORT_HEIGHT, ERROR_MESSAGES } from "@/lib/constants";
+import type { ActionItem, Command } from "@/lib/zod";
+
+const ERROR_MESSAGE = ERROR_MESSAGES.GENERIC_ERROR;
+
+/**
+ * アクションタイプに応じてデータを保存
+ */
+function saveActionData(
+  action: ActionItem,
+  { addTask, addSchedule, addLog }: ReturnType<typeof useData>
+): void {
+  const { type, title, date, tags, priority } = action;
+
+  switch (type) {
+    case "TASK":
+      addTask({ title, tags, priority });
+      break;
+    case "SCHEDULE":
+      if (date) {
+        addSchedule({ title, date, tags, priority });
+      }
+      break;
+    case "LOG":
+      addLog({ title, tags, priority });
+      break;
+  }
+}
+
+/**
+ * 複数のアクションを保存
+ */
+function saveActions(
+  actions: ActionItem[],
+  dataContext: ReturnType<typeof useData>
+): void {
+  actions.forEach((action) => {
+    saveActionData(action, dataContext);
+  });
+}
+
+/**
+ * コマンドを実行（削除・編集）
+ */
+function executeCommand(
+  command: Command,
+  dataContext: ReturnType<typeof useData>
+): boolean {
+  const { type, targetType, targetTitle, newData } = command;
+
+  let targetItem;
+  switch (targetType) {
+    case "TASK":
+      targetItem = dataContext.findTaskByTitle(targetTitle);
+      if (targetItem) {
+        if (type === "DELETE") {
+          dataContext.deleteTask(targetItem.id);
+        } else if (type === "EDIT" && newData) {
+          // 部分的な更新を適用（undefinedのフィールドは既存の値を保持）
+          dataContext.updateTask(targetItem.id, {
+            ...(newData.title !== undefined && { title: newData.title }),
+            ...(newData.tags !== undefined && { tags: newData.tags }),
+            ...(newData.priority !== undefined && { priority: newData.priority }),
+          });
+        }
+      }
+      break;
+    case "SCHEDULE":
+      targetItem = dataContext.findScheduleByTitle(targetTitle);
+      if (targetItem) {
+        if (type === "DELETE") {
+          dataContext.deleteSchedule(targetItem.id);
+        } else if (type === "EDIT" && newData) {
+          // 部分的な更新を適用（undefinedのフィールドは既存の値を保持）
+          dataContext.updateSchedule(targetItem.id, {
+            ...(newData.title !== undefined && { title: newData.title }),
+            ...(newData.date !== undefined && { date: newData.date }),
+            ...(newData.tags !== undefined && { tags: newData.tags }),
+            ...(newData.priority !== undefined && { priority: newData.priority }),
+          });
+        }
+      }
+      break;
+    case "LOG":
+      targetItem = dataContext.findLogByTitle(targetTitle);
+      if (targetItem) {
+        if (type === "DELETE") {
+          dataContext.deleteLog(targetItem.id);
+        } else if (type === "EDIT" && newData) {
+          // 部分的な更新を適用（undefinedのフィールドは既存の値を保持）
+          dataContext.updateLog(targetItem.id, {
+            ...(newData.title !== undefined && { title: newData.title }),
+            ...(newData.tags !== undefined && { tags: newData.tags }),
+            ...(newData.priority !== undefined && { priority: newData.priority }),
+          });
+        }
+      }
+      break;
+  }
+
+  return !!targetItem;
+}
+
+/**
+ * 複数のコマンドを実行
+ */
+function executeCommands(
+  commands: Command[],
+  dataContext: ReturnType<typeof useData>
+): void {
+  commands.forEach((command) => {
+    executeCommand(command, dataContext);
+  });
+}
+
+/**
+ * タイムラインアイテムを作成
+ */
+function createTimelineItem(
+  role: "user" | "ai",
+  content: string,
+  actions?: ActionItem[]
+): TimelineItem {
+  return {
+    id: generateTimelineId(role),
+    role,
+    content,
+    timestamp: new Date(),
+    actions,
+  };
+}
 
 export default function Home() {
-  const [messages, setMessages] = useState<ChatMessageData[]>([]);
+  const [items, setItems] = useState<TimelineItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const dataContext = useData();
 
-  const handleSend = async (content: string) => {
-    const timestamp = new Date().toLocaleTimeString("ja-JP", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  const handleSend = useCallback(
+    async (content: string) => {
+      const trimmedContent = content.trim();
+      if (!trimmedContent) return;
 
-    // ユーザーメッセージを追加
-    const userMessage: ChatMessageData = {
-      id: Date.now().toString(),
-      role: "user",
-      content,
-      timestamp,
-    };
+      // Optimistic UI: 即座にユーザーメッセージを追加
+      const userItem = createTimelineItem("user", trimmedContent);
+      setItems((prev) => [...prev, userItem]);
+      setIsLoading(true);
 
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
+      try {
+        const response = await analyzeInput(trimmedContent);
 
-    try {
-      // API呼び出し用のメッセージ形式に変換
-      const apiMessages = [...messages, userMessage].map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-      }));
+        // AIの返信をチャットメッセージとして表示
+        const aiItem = createTimelineItem("ai", response.reply, response.actions);
+        setItems((prev) => [...prev, aiItem]);
 
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: apiMessages,
-        }),
-      });
+        // 裏側でデータを保存（複数のアクションに対応）
+        if (response.actions.length > 0) {
+          saveActions(response.actions, dataContext);
+        }
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `API error: ${response.status}`);
+        // コマンドを実行（削除・編集）
+        if (response.commands.length > 0) {
+          executeCommands(response.commands, dataContext);
+        }
+      } catch (error) {
+        const errorItem = createTimelineItem("ai", ERROR_MESSAGE);
+        setItems((prev) => [...prev, errorItem]);
+      } finally {
+        setIsLoading(false);
       }
-
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      const assistantMessage: ChatMessageData = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: data.message || "応答を取得できませんでした",
-        timestamp,
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error("Error sending message:", error);
-      const errorMessage: ChatMessageData = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: error instanceof Error && error.message.includes("GEMINI_API_KEY")
-          ? "APIキーが設定されていません。設定を確認してください。"
-          : "申し訳ございません。エラーが発生しました。もう一度お試しください。",
-        timestamp,
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    },
+    [dataContext]
+  );
 
   return (
     <MobileContainer>
-      {/* Sidebar */}
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
-      {/* Header */}
-      <header className="sticky top-0 z-10 bg-white border-b border-zinc-200">
-        <div className="px-4 py-4 flex items-center">
-          <button
-            onClick={() => setIsSidebarOpen(true)}
-            className="p-2 rounded-lg hover:bg-zinc-100 transition-colors mr-3"
-            aria-label="メニューを開く"
-          >
-            <Menu className="h-6 w-6 text-zinc-700" />
-          </button>
-          <h1 className="text-xl font-semibold flex-1 text-center">SecondBrain</h1>
-          <div className="w-10" /> {/* Spacer for centering */}
-        </div>
-      </header>
+      <Header title="SecondBrain" onMenuClick={() => setIsSidebarOpen(true)} />
 
-      {/* Timeline (Scrollable area) */}
-      <div className="flex flex-col pb-20" style={{ minHeight: "calc(100vh - 64px)" }}>
-        <Timeline messages={messages} />
+      <div className="flex flex-col pb-20" style={{ minHeight: MIN_VIEWPORT_HEIGHT }}>
+        <Timeline items={items} />
       </div>
 
-      {/* Chat Input (Fixed at bottom) */}
       <ChatInput onSend={handleSend} isLoading={isLoading} />
     </MobileContainer>
   );

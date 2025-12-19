@@ -17,6 +17,11 @@ interface SidebarProps {
   onClose: () => void;
 }
 
+/**
+ * サイドバーコンポーネント（モノトーン）
+ * 
+ * Digital Zenデザイン原則に基づき、選択状態は黒、非選択時はグレーで表現
+ */
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
 
@@ -40,7 +45,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-zinc-200">
-            <h2 className="text-lg font-semibold">Menu</h2>
+            <h2 className="text-lg font-semibold text-zinc-900">Menu</h2>
             <button
               onClick={onClose}
               className="p-2 rounded-lg hover:bg-zinc-100 transition-colors"
@@ -64,8 +69,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       className={cn(
                         "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
                         isActive
-                          ? "bg-zinc-100 text-zinc-900"
-                          : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
+                          ? "bg-zinc-100 text-zinc-900 font-semibold"
+                          : "text-zinc-400 hover:bg-zinc-50 hover:text-zinc-900"
                       )}
                     >
                       <Icon className="h-5 w-5" />
@@ -81,4 +86,3 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     </>
   );
 }
-

@@ -1,21 +1,46 @@
 "use client";
 
-import { ChatMessage, type ChatMessageData } from "./chat-message";
-import { useEffect, useRef } from "react";
+import { TimelineItem } from "@/lib/types";
+import { ChatMessage } from "./chat-message";
+import { useEffect, useRef, useMemo } from "react";
+import { formatTime } from "@/lib/utils/date";
+import { EMPTY_STATES } from "@/lib/constants";
 
 interface TimelineProps {
-  messages: ChatMessageData[];
+  items: TimelineItem[];
 }
 
-export function Timeline({ messages }: TimelineProps) {
+/**
+ * タイムラインコンポーネント
+ */
+export function Timeline({ items }: TimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // メッセージデータをメモ化して再レンダリングを削減
+  const messages = useMemo(
+    () =>
+      items.map((item) => ({
+        id: item.id,
+        role: item.role === "user" ? ("user" as const) : ("assistant" as const),
+        content: item.content,
+        timestamp: formatTime(item.timestamp),
+      })),
+    [items]
+  );
+
   useEffect(() => {
-    // Auto-scroll to bottom when new messages arrive
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [items]);
+
+  if (items.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[200px] text-zinc-400 text-sm">
+        {EMPTY_STATES.MESSAGES}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -27,17 +52,10 @@ export function Timeline({ messages }: TimelineProps) {
       }}
     >
       <div className="space-y-1">
-        {messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full min-h-[200px] text-zinc-400 text-sm">
-            メッセージがありません
-          </div>
-        ) : (
-          messages.map((message) => (
-            <ChatMessage key={message.id} message={message} />
-          ))
-        )}
+        {messages.map((message) => (
+          <ChatMessage key={message.id} message={message} />
+        ))}
       </div>
     </div>
   );
 }
-

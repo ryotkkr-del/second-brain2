@@ -1,5 +1,6 @@
 import { Brain, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { memo } from "react";
 
 export interface ChatMessageData {
   id: string;
@@ -12,7 +13,10 @@ interface ChatMessageProps {
   message: ChatMessageData;
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+/**
+ * チャットメッセージコンポーネント（メモ化）
+ */
+export const ChatMessage = memo(function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === "user";
 
   return (
@@ -48,5 +52,4 @@ export function ChatMessage({ message }: ChatMessageProps) {
       </div>
     </div>
   );
-}
-
+});

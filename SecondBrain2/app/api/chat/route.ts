@@ -2,15 +2,20 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 
 // Gemini 1.5 Flash を使用
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+// 環境変数からAPIキーを取得（両方の名前に対応）
+const getApiKey = () => process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY || "";
+const genAI = new GoogleGenerativeAI(getApiKey());
 
 export async function POST(req: NextRequest) {
   try {
     const { messages } = await req.json();
 
-    if (!process.env.GEMINI_API_KEY) {
+    // 環境変数の確認（両方の名前に対応）
+    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("GOOGLE_GENERATIVE_AI_API_KEY or GEMINI_API_KEY is not set");
       return NextResponse.json(
-        { error: "GEMINI_API_KEY is not set" },
+        { error: "GOOGLE_GENERATIVE_AI_API_KEY or GEMINI_API_KEY is not set" },
         { status: 500 }
       );
     }
